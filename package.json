@@ -13,12 +13,18 @@
   "description": "",
   "dependencies": {
     "@prisma/client": "^6.16.2",
+    "@supabase/supabase-js": "^2.57.4",
     "@types/cors": "^2.8.19",
+    "@types/pdfkit": "^0.17.3",
+    "@types/stream-buffers": "^3.0.7",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^7.0.6",
+    "pdfkit": "^0.17.2",
+    "stream-buffers": "^3.0.3",
     "typescript": "^5.9.2"
   },
   "devDependencies": {
@@ -26,6 +32,7 @@
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.5.2",
+    "@types/nodemailer": "^7.0.1",
     "prisma": "^6.16.2"
   }
 }
