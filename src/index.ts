@@ -1,7 +1,16 @@
-interface User {
-  username: string;
-}
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
 
-export default function Hello({ username }: User) {
-  console.log(`Hello Dear, ${username}`);
-}
+dotenv.config();
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+app.get("/", (_req, res) => {
+  res.send("SaaS Invoice Backend is running 🚀");
+});
+
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
