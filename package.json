@@ -24,6 +24,7 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^7.0.6",
     "pdfkit": "^0.17.2",
+    "razorpay": "^2.9.6",
     "stream-buffers": "^3.0.3",
     "typescript": "^5.9.2"
   },

@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import companyRoutes from "./routes/company.routes";
 import invoiceRoutes from "./routes/invoice.routes";
+import razorpayRoutes from "./routes/razorpay.routes";
 
 dotenv.config();
 const app = express();
@@ -21,6 +22,7 @@ app.use("/auth", authRoutes);
 app.use("/user", userRoutes);
 app.use("/company", companyRoutes);
 app.use("/invoices", invoiceRoutes);
+app.use("/razorpay", express.json({ type: "*/*" }), razorpayRoutes);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
