@@ -7,7 +7,8 @@ import userRoutes from "./routes/user.routes";
 import companyRoutes from "./routes/company.routes";
 import invoiceRoutes from "./routes/invoice.routes";
 import razorpayRoutes from "./routes/razorpay.routes";
-import webhookRoutes from "./routes/webhook.routes";
+import crypto from "crypto";
+import prisma from "./config/prisma";
 
 dotenv.config();
 const app = express();
@@ -17,7 +18,48 @@ app.use(cors());
 app.post(
   "/razorpay/webhook",
   express.raw({ type: "application/json" }),
-  webhookRoutes
+  async (req, res) => {
+    try {
+      const webhookSecret = "AaPYLWS_WPny8VV";
+      const signature = req.headers["x-razorpay-signature"];
+      const body = req.body.toString();
+      const digest = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(body)
+        .digest("hex");
+
+      if (digest !== signature) {
+        console.log("❌ Invalid signature", { digest, signature });
+        return res.status(400).json({ message: "Invalid signature" });
+      }
+
+      const payload = JSON.parse(body);
+      const event = payload.event;
+      console.log("📬 Webhook Event:", event);
+
+      if (["subscription.activated", "subscription.charged"].includes(event)) {
+        const subId = payload.payload.subscription.entity.id;
+        console.log("📦 Activating subscription:", subId);
+        const result = await prisma.subscription.updateMany({
+          where: { stripeSubscriptionId: subId },
+          data: { status: "active" },
+        });
+        console.log("📊 Rows updated:", result.count);
+      } else if (event === "subscription.cancelled") {
+        const subId = payload.payload.subscription.entity.id;
+        console.log("📦 Cancelling subscription:", subId);
+        await prisma.subscription.updateMany({
+          where: { stripeSubscriptionId: subId },
+          data: { status: "canceled" },
+        });
+      }
+
+      res.json({ status: "success" });
+    } catch (err) {
+      console.error("⚠️ Webhook error:", err);
+      res.status(500).json({ status: "error" });
+    }
+  }
 );
 
 app.use(express.json());
