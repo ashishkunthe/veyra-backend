@@ -7,11 +7,32 @@ import { sendInvoiceEmail } from "../services/emailServices";
 const router = Router();
 
 // Create invoice
+// Create invoice
 router.post("/", protect, async (req: any, res) => {
   try {
     const { companyId, clientName, clientEmail, items, tax, total, dueDate } =
       req.body;
 
+    // 🧠 1. Check subscription status
+    const subscription = await prisma.subscription.findFirst({
+      where: { userId: req.user.id, status: "active" },
+    });
+
+    // 🧮 2. If no subscription, enforce invoice limit
+    if (!subscription) {
+      const invoiceCount = await prisma.invoice.count({
+        where: { userId: req.user.id },
+      });
+
+      if (invoiceCount >= 5) {
+        return res.status(403).json({
+          message:
+            "🚫 Invoice limit reached. Upgrade your plan to create unlimited invoices.",
+        });
+      }
+    }
+
+    // ✅ 3. Create the invoice
     const invoice = await prisma.invoice.create({
       data: {
         userId: req.user.id,

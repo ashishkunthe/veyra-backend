@@ -7,11 +7,19 @@ import userRoutes from "./routes/user.routes";
 import companyRoutes from "./routes/company.routes";
 import invoiceRoutes from "./routes/invoice.routes";
 import razorpayRoutes from "./routes/razorpay.routes";
+import webhookRoutes from "./routes/webhook.routes";
 
 dotenv.config();
 const app = express();
 
 app.use(cors());
+
+app.post(
+  "/razorpay/webhook",
+  express.raw({ type: "application/json" }),
+  webhookRoutes
+);
+
 app.use(express.json());
 
 app.get("/", (_req, res) => {
