@@ -1,12 +1,16 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import "./jobs/agenda";
 
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
 import companyRoutes from "./routes/company.routes";
 import invoiceRoutes from "./routes/invoice.routes";
 import razorpayRoutes from "./routes/razorpay.routes";
+import clientRoutes from "./routes/client.routes";
+import analyticsRoutes from "./routes/analytics.routes";
+
 import crypto from "crypto";
 import prisma from "./config/prisma";
 
@@ -73,6 +77,8 @@ app.use("/user", userRoutes);
 app.use("/company", companyRoutes);
 app.use("/invoices", invoiceRoutes);
 app.use("/razorpay", express.json(), razorpayRoutes);
+app.use("/clients", clientRoutes);
+app.use("/analytics", analyticsRoutes);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

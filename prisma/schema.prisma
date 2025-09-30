@@ -19,6 +19,7 @@ model User {
   companies       Company[]
   invoices        Invoice[]
   subscriptions   Subscription[]
+  clients         Client[]
 }
 
 model Company {
@@ -52,6 +53,8 @@ model Invoice {
   recurrenceInterval  String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+  clientId     String?
+  client       Client?  @relation(fields: [clientId], references: [id])
 }
 
 model Subscription {
@@ -65,4 +68,19 @@ model Subscription {
   endDate             DateTime?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId  String
+  user    User      @relation(fields: [userId], references: [id])
+
+  invoices Invoice[]
 }
