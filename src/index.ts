@@ -80,5 +80,11 @@ app.use("/razorpay", express.json(), razorpayRoutes);
 app.use("/clients", clientRoutes);
 app.use("/analytics", analyticsRoutes);
 
+app.post("/waitlist", async (req, res) => {
+  const { name, email } = req.body;
+  const entry = await prisma.waitlist.create({ data: { name, email } });
+  res.status(201).json(entry);
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
