@@ -85,9 +85,3 @@ model Client {
   invoices Invoice[]
 }
 
-model Waitlist {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  createdAt DateTime @default(now())
-}
