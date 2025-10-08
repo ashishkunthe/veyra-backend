@@ -6,7 +6,7 @@ import { sendInvoiceEmail } from "../services/emailServices";
 
 const router = Router();
 
-// create invoice
+// 📄 Create Invoice with plan checks
 router.post("/", protect, async (req: any, res) => {
   try {
     const {
@@ -22,27 +22,49 @@ router.post("/", protect, async (req: any, res) => {
       recurrenceInterval,
     } = req.body;
 
-    // 🧠 Handle free plan limit check (5 invoices)
+    // 🔐 Get active subscription (if any)
     const sub = await prisma.subscription.findFirst({
       where: { userId: req.user.id, status: "active" },
     });
 
+    // 🧠 Plan logic
     if (!sub) {
+      // 🆓 Free plan – 5 invoices lifetime
       const invoiceCount = await prisma.invoice.count({
         where: { userId: req.user.id },
       });
-
       if (invoiceCount >= 5) {
         return res.status(403).json({
-          message: "Invoice limit reached. Upgrade your plan to continue.",
+          message: "Free plan limit reached (5 invoices). Upgrade to continue.",
         });
       }
+    } else if (sub.planName === "starter") {
+      // 📦 Starter – 1000 invoices per month
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+
+      const monthlyCount = await prisma.invoice.count({
+        where: {
+          userId: req.user.id,
+          createdAt: { gte: monthStart },
+        },
+      });
+
+      if (monthlyCount >= 1000) {
+        return res.status(403).json({
+          message:
+            "Starter plan limit reached (1000 invoices/month). Upgrade to Pro for unlimited invoices.",
+        });
+      }
+    } else if (sub.planName === "pro") {
+      // 🚀 Pro – Unlimited invoices → no restrictions
     }
 
+    // ✉️ Get client details if clientId is passed
     let finalClientName = clientName;
     let finalClientEmail = clientEmail;
 
-    // 🧩 If clientId is provided → fetch client info automatically
     if (clientId) {
       const client = await prisma.client.findFirst({
         where: { id: clientId, userId: req.user.id },
@@ -72,7 +94,7 @@ router.post("/", protect, async (req: any, res) => {
       },
     });
 
-    // 📄 Generate and upload PDF
+    // 📄 Generate & upload PDF
     const pdfUrl = await generateInvoicePDF(invoice.id, {
       clientName: finalClientName,
       clientEmail: finalClientEmail,
@@ -83,7 +105,6 @@ router.post("/", protect, async (req: any, res) => {
       tax,
     });
 
-    // 📌 Save PDF URL
     await prisma.invoice.update({
       where: { id: invoice.id },
       data: { pdfUrl },
