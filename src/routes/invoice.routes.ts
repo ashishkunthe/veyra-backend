@@ -6,7 +6,6 @@ import { sendInvoiceEmail } from "../services/emailServices";
 
 const router = Router();
 
-// 📄 Create Invoice with plan checks
 router.post("/", protect, async (req: any, res) => {
   try {
     const {
@@ -20,26 +19,24 @@ router.post("/", protect, async (req: any, res) => {
       dueDate,
       isRecurring,
       recurrenceInterval,
+      paymentDetails,
     } = req.body;
 
-    // 🔐 Get active subscription (if any)
+    // 🔐 Check active subscription (same logic as before)
     const sub = await prisma.subscription.findFirst({
       where: { userId: req.user.id, status: "active" },
     });
 
-    // 🧠 Plan logic
     if (!sub) {
-      // 🆓 Free plan – 5 invoices lifetime
       const invoiceCount = await prisma.invoice.count({
         where: { userId: req.user.id },
       });
-      if (invoiceCount >= 5) {
+      if (invoiceCount >= 15) {
         return res.status(403).json({
           message: "Free plan limit reached (5 invoices). Upgrade to continue.",
         });
       }
     } else if (sub.planName === "starter") {
-      // 📦 Starter – 1000 invoices per month
       const monthStart = new Date();
       monthStart.setDate(1);
       monthStart.setHours(0, 0, 0, 0);
@@ -57,26 +54,27 @@ router.post("/", protect, async (req: any, res) => {
             "Starter plan limit reached (1000 invoices/month). Upgrade to Pro for unlimited invoices.",
         });
       }
-    } else if (sub.planName === "pro") {
-      // 🚀 Pro – Unlimited invoices → no restrictions
     }
 
-    // ✉️ Get client details if clientId is passed
+    // Resolve client info if clientId provided
     let finalClientName = clientName;
     let finalClientEmail = clientEmail;
-
     if (clientId) {
       const client = await prisma.client.findFirst({
         where: { id: clientId, userId: req.user.id },
       });
-      if (!client) {
-        return res.status(404).json({ message: "Client not found" });
-      }
+      if (!client) return res.status(404).json({ message: "Client not found" });
       finalClientName = client.name;
       finalClientEmail = client.email;
     }
 
-    // 🧾 Create invoice
+    // Ensure company exists and grab its details
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+    });
+    if (!company) return res.status(404).json({ message: "Company not found" });
+
+    // Create invoice record (store paymentDetails too)
     const invoice = await prisma.invoice.create({
       data: {
         userId: req.user.id,
@@ -91,20 +89,28 @@ router.post("/", protect, async (req: any, res) => {
         status: "pending",
         isRecurring: isRecurring || false,
         recurrenceInterval: recurrenceInterval || null,
+        paymentDetails: paymentDetails || null,
       },
     });
 
-    // 📄 Generate & upload PDF
+    // Generate PDF and upload to Supabase, pass full company details to the generator
     const pdfUrl = await generateInvoicePDF(invoice.id, {
       clientName: finalClientName,
       clientEmail: finalClientEmail,
-      companyName: "Your Company",
+      companyName: company.name,
+      companyAddress: company.address || "",
+      // @ts-ignore
+      companyLogo: company.logoUrl,
+      // @ts-ignore
+      companyTaxInfo: company.taxInfo,
+      tax: tax || 0,
       total,
       items,
       dueDate: invoice.dueDate,
-      tax,
+      paymentDetails: paymentDetails || "",
     });
 
+    // Save pdfUrl
     await prisma.invoice.update({
       where: { id: invoice.id },
       data: { pdfUrl },
@@ -112,7 +118,7 @@ router.post("/", protect, async (req: any, res) => {
 
     res.status(201).json({ message: "Invoice created successfully", invoice });
   } catch (error: any) {
-    console.error(error);
+    console.error("Create invoice error:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -154,7 +160,6 @@ router.delete("/:id", protect, async (req: any, res) => {
 
 // Generate & download PDF
 router.get("/:id/pdf", protect, async (req: any, res) => {
-  // 🧾 Fetch the invoice first
   const invoice = await prisma.invoice.findUnique({
     where: { id: req.params.id },
   });
@@ -163,7 +168,6 @@ router.get("/:id/pdf", protect, async (req: any, res) => {
     return res.status(404).json({ message: "Invoice not found" });
   }
 
-  // 🏢 Fetch the company name using companyId from invoice
   const company = await prisma.company.findUnique({
     where: { id: invoice.companyId },
   });
@@ -172,19 +176,24 @@ router.get("/:id/pdf", protect, async (req: any, res) => {
     return res.status(404).json({ message: "Company not found" });
   }
 
-  // 🧾 Generate PDF with real company name
+  // 🧾 Generate PDF with full data (including payment details)
   const pdfUrl = await generateInvoicePDF(invoice.id, {
     clientName: invoice.clientName,
     clientEmail: invoice.clientEmail,
     companyName: company.name,
+    companyAddress: company.address || "",
+    // @ts-ignore
+    companyLogo: company.logoUrl,
+    // @ts-ignore
+    companyTaxInfo: company.taxInfo,
+    tax: invoice.tax,
     total: invoice.total,
     // @ts-ignore
     items: invoice.items,
     dueDate: invoice.dueDate,
-    tax: invoice.tax,
+    paymentDetails: invoice.paymentDetails || "", // 👈 fixed line
   });
 
-  // 💾 Save the new PDF URL back to DB
   await prisma.invoice.update({
     where: { id: invoice.id },
     data: { pdfUrl },
@@ -204,20 +213,26 @@ router.post("/:id/send", protect, async (req: any, res) => {
   const company = await prisma.company.findUnique({
     where: { id: invoice.companyId },
   });
-
   if (!company) {
     return res.status(404).json({ message: "Company not found" });
   }
 
+  // 🧾 Generate PDF with payment details for email
   const pdfPath = await generateInvoicePDF(invoice.id, {
     clientName: invoice.clientName,
     clientEmail: invoice.clientEmail,
     companyName: company.name,
+    companyAddress: company.address || "",
+    // @ts-ignore
+    companyLogo: company.logoUrl,
+    // @ts-ignore
+    companyTaxInfo: company.taxInfo,
+    tax: invoice.tax,
     total: invoice.total,
     // @ts-ignore
     items: invoice.items,
     dueDate: invoice.dueDate,
-    tax: invoice.tax,
+    paymentDetails: invoice.paymentDetails || "", // 👈 include this here too
   });
 
   await sendInvoiceEmail(
@@ -226,6 +241,7 @@ router.post("/:id/send", protect, async (req: any, res) => {
     "Please find attached invoice",
     pdfPath
   );
+
   res.json({ message: "Invoice sent successfully" });
 });
 

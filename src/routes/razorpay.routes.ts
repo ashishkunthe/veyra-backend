@@ -39,7 +39,7 @@ router.get("/status", protect, async (req: any, res) => {
   try {
     const sub = await prisma.subscription.findFirst({
       where: { userId: req.user.id, status: "active" },
-      orderBy: { createdAt: "desc" }, // just in case multiple subs exist
+      orderBy: { createdAt: "desc" },
     });
 
     if (!sub) {

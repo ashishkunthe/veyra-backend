@@ -51,6 +51,7 @@ model Invoice {
   pdfUrl              String?
   isRecurring         Boolean  @default(false)
   recurrenceInterval  String?
+  paymentDetails      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   clientId     String?
