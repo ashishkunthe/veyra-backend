@@ -10,18 +10,27 @@ router.post("/create-subscription", protect, async (req: any, res) => {
   try {
     const { planId } = req.body;
 
+    // 🧠 Map Razorpay plan IDs to readable names
+    const planMap: Record<string, string> = {
+      plan_RQWtzIDOuFsegM: "starter",
+      plan_RQWuo7mIXF9QzV: "pro",
+    };
+
+    const planName = planMap[planId] || "free";
+
+    // Create Razorpay subscription
     const subscription = await razorpay.subscriptions.create({
       plan_id: planId,
       customer_notify: 1,
       total_count: 12,
     });
 
-    // Save subscription in DB
+    // Save in DB with mapped plan name
     await prisma.subscription.create({
       data: {
         userId: req.user.id,
         stripeSubscriptionId: subscription.id,
-        planName: planId,
+        planName, // ✅ "starter" or "pro"
         status: subscription.status,
         startDate: new Date(),
       },
@@ -29,7 +38,7 @@ router.post("/create-subscription", protect, async (req: any, res) => {
 
     res.json({ subscription });
   } catch (error: any) {
-    console.error(error);
+    console.error("❌ Error creating subscription:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -54,11 +63,11 @@ router.get("/status", protect, async (req: any, res) => {
     let invoicesLimit = 5;
     let message = "Using free plan.";
 
-    if (sub.planName === "starter") {
+    if (sub.planName == "starter") {
       plan = "starter";
       invoicesLimit = 1000;
       message = "Using Starter plan (1000 invoices/month)";
-    } else if (sub.planName === "pro") {
+    } else if (sub.planName == "pro") {
       plan = "pro";
       invoicesLimit = Infinity;
       message = "Using Pro plan (Unlimited invoices)";
