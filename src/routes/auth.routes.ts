@@ -1,6 +1,7 @@
 import { Router } from "express";
 import prisma from "../config/prisma";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import { generateToken } from "../utils/generateTokens";
 
 const router = Router();
@@ -49,6 +50,33 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get("/verify", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    // @ts-ignore
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Optionally, check if user still exists
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ message: "Token valid", user });
+  } catch (err) {
+    console.error(err);
+    res.status(401).json({ message: "Invalid or expired token" });
   }
 });
 
