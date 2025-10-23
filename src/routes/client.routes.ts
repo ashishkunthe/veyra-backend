@@ -25,6 +25,9 @@ router.get("/", protect, async (req: any, res) => {
   const clients = await prisma.client.findMany({
     where: { userId: req.user.id },
     orderBy: { createdAt: "desc" },
+    include: {
+      invoices: true,
+    },
   });
   res.json(clients);
 });
@@ -33,6 +36,9 @@ router.get("/", protect, async (req: any, res) => {
 router.get("/:id", protect, async (req: any, res) => {
   const client = await prisma.client.findFirst({
     where: { id: req.params.id, userId: req.user.id },
+    include: {
+      invoices: true,
+    },
   });
   if (!client) return res.status(404).json({ message: "Client not found" });
   res.json(client);
