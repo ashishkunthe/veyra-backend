@@ -10,6 +10,7 @@ import invoiceRoutes from "./routes/invoice.routes";
 import razorpayRoutes from "./routes/razorpay.routes";
 import clientRoutes from "./routes/client.routes";
 import analyticsRoutes from "./routes/analytics.routes";
+import dashboardRoute from "./routes/dashboard.routes";
 
 import crypto from "crypto";
 import prisma from "./config/prisma";
@@ -79,6 +80,7 @@ app.use("/invoices", invoiceRoutes);
 app.use("/razorpay", express.json(), razorpayRoutes);
 app.use("/clients", clientRoutes);
 app.use("/analytics", analyticsRoutes);
+app.use("/", dashboardRoute);
 
 app.post("/waitlist", async (req, res) => {
   const { name, email } = req.body;
