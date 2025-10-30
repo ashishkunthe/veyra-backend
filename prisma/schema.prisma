@@ -14,6 +14,11 @@ model User {
   email           String    @unique
   passwordHash    String
   stripeCustomerId String?
+  businessType    String?        
+  phone           String?        
+  country         String?        
+  profileImageUrl String?        
+  onboardingComplete Boolean @default(false) 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   companies       Company[]
@@ -21,6 +26,7 @@ model User {
   subscriptions   Subscription[]
   clients         Client[]
 }
+
 
 model Company {
   id         String   @id @default(uuid())
