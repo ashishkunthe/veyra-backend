@@ -26,7 +26,7 @@ export const generateInvoicePDF = async (
   invoiceId: string,
   data: InvoicePDFProps
 ): Promise<string> => {
-  const doc = new PDFDocument({ margin: 50 });
+  const doc = new PDFDocument({ size: "A4", margin: 50 });
   const writableStream = new streamBuffers.WritableStreamBuffer();
   doc.pipe(writableStream);
 
@@ -36,87 +36,267 @@ export const generateInvoicePDF = async (
       currency: "INR",
     }).format(val);
 
-  // ---- Header ----
+  // Colors
+  const primaryColor = "#F59E0B"; // Blue
+  const lightBg = "#F1F5F9";
+  const darkText = "#1E293B";
+  const grayText = "#64748B";
+
+  const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
+  const margin = 50;
+  const contentWidth = pageWidth - margin * 2;
+
+  // ========== HEADER SECTION ==========
+  // Top colored bar
+  doc.rect(0, 0, pageWidth, 120).fill(primaryColor);
+
+  // INVOICE title (right side)
   doc
-    .fontSize(22)
-    .text("INVOICE", { align: "center" })
-    .moveDown(0.5)
-    .fontSize(12)
-    .text(`Invoice ID: ${invoiceId}`)
-    .text(`Date: ${new Date().toLocaleDateString()}`)
-    .text(`Due Date: ${new Date(data.dueDate).toLocaleDateString()}`)
-    .moveDown();
+    .fillColor("#FFFFFF")
+    .fontSize(36)
+    .font("Helvetica-Bold")
+    .text("INVOICE", margin, 30, {
+      width: contentWidth,
+      align: "right",
+    });
 
-  // ---- Company Info ----
-  doc.fontSize(14).text(data.companyName, { underline: true }).moveDown(0.3);
-  if (data.companyAddress) doc.text(`Address: ${data.companyAddress}`);
-  if (data.companyTaxInfo) doc.text(`GST: ${data.companyTaxInfo}`);
-  doc.moveDown(1);
+  // Company Name (left side)
+  doc.fontSize(20).font("Helvetica-Bold").text(data.companyName, margin, 35, {
+    width: 300,
+  });
 
-  // ---- Client Info ----
-  doc.fontSize(14).text("Bill To:", { underline: true }).moveDown(0.3);
-  doc.fontSize(12).text(`Name: ${data.clientName}`);
-  doc.text(`Email: ${data.clientEmail}`);
-  doc.moveDown(1);
+  // Company details
+  doc.fontSize(9).font("Helvetica");
+  let headerY = 62;
+  if (data.companyAddress) {
+    doc.text(data.companyAddress, margin, headerY, { width: 300 });
+    headerY += 12;
+  }
+  if (data.companyTaxInfo) {
+    doc.text(`GST: ${data.companyTaxInfo}`, margin, headerY, { width: 300 });
+  }
 
-  // ---- Items ----
-  doc.fontSize(14).text("Items:", { underline: true }).moveDown(0.3);
+  // Invoice metadata (right side)
+  doc.fontSize(9).font("Helvetica");
+  const rightX = pageWidth - margin - 180;
+
+  doc.text(`Date: ${new Date().toLocaleDateString("en-IN")}`, rightX, 86, {
+    width: 180,
+    align: "right",
+    lineBreak: false,
+  });
+  doc.text(
+    `Due: ${new Date(data.dueDate).toLocaleDateString("en-IN")}`,
+    rightX,
+    100,
+    {
+      width: 180,
+      align: "right",
+      lineBreak: false,
+    }
+  );
+
+  let y = 150;
+
+  // ========== BILL TO SECTION ==========
+  doc.fillColor(darkText).fontSize(11).font("Helvetica-Bold");
+  doc.text("BILL TO", margin, y);
+
+  y += 18;
+  doc.fontSize(10).font("Helvetica").fillColor(darkText);
+  doc.text(data.clientName, margin, y);
+  y += 14;
+  doc.fillColor(grayText);
+  doc.text(data.clientEmail, margin, y);
+
+  y += 40;
+
+  // ========== ITEMS TABLE ==========
+  const tableStart = y;
+  const tableX = margin;
+  const tableWidth = contentWidth;
+
+  // Column configuration
+  const col1X = tableX;
+  const col1W = 50; // Qty
+  const col2X = col1X + col1W;
+  const col2W = 270; // Description
+  const col3X = col2X + col2W;
+  const col3W = 100; // Unit Price
+  const col4X = col3X + col3W;
+  const col4W = tableWidth - col1W - col2W - col3W; // Amount
+
+  // Table header
+  const headerHeight = 30;
+  doc.rect(tableX, y, tableWidth, headerHeight).fill(primaryColor);
+
+  doc.fillColor("#FFFFFF").fontSize(10).font("Helvetica-Bold");
+  doc.text("QTY", col1X + 5, y + 10, { width: col1W - 10, align: "center" });
+  doc.text("DESCRIPTION", col2X + 10, y + 10, { width: col2W - 20 });
+  doc.text("UNIT PRICE", col3X + 5, y + 10, {
+    width: col3W - 10,
+    align: "right",
+  });
+  doc.text("AMOUNT", col4X + 5, y + 10, { width: col4W - 10, align: "right" });
+
+  y += headerHeight;
+
+  // Table rows
   let subtotal = 0;
+  const rowHeight = 28;
+
   if (!Array.isArray(data.items) || data.items.length === 0) {
-    doc.fontSize(12).text("No items listed.");
+    doc.rect(tableX, y, tableWidth, rowHeight).fill(lightBg);
+    doc
+      .fillColor(grayText)
+      .fontSize(10)
+      .font("Helvetica")
+      .text("No items listed", col2X + 10, y + 9, { width: col2W - 20 });
+    y += rowHeight;
   } else {
     data.items.forEach((item, i) => {
       const amount = item.qty * item.price;
       subtotal += amount;
-      doc
-        .fontSize(12)
-        .text(
-          `${i + 1}. ${item.description} — Qty: ${item.qty} × ₹${
-            item.price
-          } = ${currency(amount)}`
-        );
+
+      // Page break if needed
+      if (y > pageHeight - 250) {
+        doc.addPage();
+        y = 80;
+      }
+
+      // Alternating row background
+      if (i % 2 === 0) {
+        doc.rect(tableX, y, tableWidth, rowHeight).fill(lightBg);
+      }
+
+      doc.fillColor(darkText).fontSize(9.5).font("Helvetica");
+      const textY = y + 9;
+
+      // Quantity
+      doc.text(String(item.qty), col1X + 5, textY, {
+        width: col1W - 10,
+        align: "center",
+      });
+
+      // Description
+      doc.text(item.description, col2X + 10, textY, {
+        width: col2W - 20,
+        ellipsis: true,
+        lineBreak: false,
+      });
+
+      // Unit Price
+      doc.text(currency(item.price), col3X + 5, textY, {
+        width: col3W - 10,
+        align: "right",
+      });
+
+      // Amount
+      doc.text(currency(amount), col4X + 5, textY, {
+        width: col4W - 10,
+        align: "right",
+      });
+
+      y += rowHeight;
     });
   }
 
-  doc.moveDown(1);
+  // Table bottom border
+  doc.strokeColor(primaryColor).lineWidth(2);
+  doc
+    .moveTo(tableX, y)
+    .lineTo(tableX + tableWidth, y)
+    .stroke();
 
-  // ---- Totals ----
+  y += 30;
+
+  // ========== TOTALS SECTION ==========
+  const totalsX = pageWidth - margin - 220;
+  const labelW = 120;
+  const valueW = 100;
+
+  doc.fillColor(darkText).fontSize(10).font("Helvetica");
+
+  // Subtotal
+  doc.text("Subtotal:", totalsX, y, { width: labelW });
+  doc.text(currency(subtotal), totalsX + labelW, y, {
+    width: valueW,
+    align: "right",
+  });
+
+  y += 18;
+
+  // Tax
   const taxAmount = subtotal * ((data.tax || 0) / 100);
+  doc.text(`Tax (${data.tax || 0}%):`, totalsX, y, { width: labelW });
+  doc.text(currency(taxAmount), totalsX + labelW, y, {
+    width: valueW,
+    align: "right",
+  });
+
+  y += 26;
+
+  // Total (highlighted)
   const grandTotal = subtotal + taxAmount;
-
+  const totalBoxH = 32;
   doc
-    .fontSize(12)
-    .text(`Subtotal: ${currency(subtotal)}`)
-    .text(`Tax (${data.tax || 0}%): ${currency(taxAmount)}`)
-    .moveDown(0.3)
-    .fontSize(14)
-    .text(`Total: ${currency(grandTotal)}`, { underline: true })
-    .moveDown(1.5);
+    .rect(totalsX - 10, y - 5, labelW + valueW + 20, totalBoxH)
+    .fill(primaryColor);
 
-  // ---- Payment Details ----
+  doc.fillColor("#FFFFFF").fontSize(12).font("Helvetica-Bold");
+  doc.text("TOTAL DUE", totalsX, y + 5, { width: labelW });
+  doc.text(currency(grandTotal), totalsX + labelW, y + 5, {
+    width: valueW,
+    align: "right",
+  });
+
+  y += totalBoxH + 35;
+
+  // ========== PAYMENT DETAILS ==========
   if (data.paymentDetails && data.paymentDetails.trim().length > 0) {
-    // ensure visible on page
-    if (doc.y > doc.page.height - 120) doc.addPage();
-    doc
-      .fontSize(14)
-      .text("💳 Payment Details", { underline: true })
-      .moveDown(0.4)
-      .fontSize(12)
-      .text(data.paymentDetails, {
-        width: 480,
-        align: "left",
-      })
-      .moveDown(1);
+    if (y > pageHeight - 180) {
+      doc.addPage();
+      y = 80;
+    }
+
+    doc.fillColor(primaryColor).fontSize(12).font("Helvetica-Bold");
+    doc.text("Payment Details", margin, y);
+
+    y += 18;
+    doc.fillColor(darkText).fontSize(9).font("Helvetica");
+    doc.text(data.paymentDetails, margin, y, {
+      width: contentWidth,
+      align: "left",
+      lineGap: 2,
+    });
+
+    y += 50;
   }
 
-  // ---- Footer ----
-  if (doc.y > doc.page.height - 100) doc.addPage();
+  // ========== FOOTER ==========
+  const footerY = pageHeight - 70;
+
+  doc.strokeColor("#E2E8F0").lineWidth(1);
   doc
-    .fontSize(10)
-    .text("Thank you for your business!", { align: "center" })
-    .text(`${data.companyName} © ${new Date().getFullYear()}`, {
+    .moveTo(margin, footerY)
+    .lineTo(pageWidth - margin, footerY)
+    .stroke();
+
+  doc.fillColor(grayText).fontSize(9).font("Helvetica");
+  doc.text("Thank you for your business!", margin, footerY + 15, {
+    width: contentWidth,
+    align: "center",
+  });
+  doc.text(
+    `${data.companyName} © ${new Date().getFullYear()}`,
+    margin,
+    footerY + 28,
+    {
+      width: contentWidth,
       align: "center",
-    });
+    }
+  );
 
   // Finalize
   doc.end();
