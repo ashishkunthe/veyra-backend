@@ -22,21 +22,24 @@ router.post("/", protect, async (req: any, res) => {
       paymentDetails,
     } = req.body;
 
-    // 🔐 Check active subscription (same logic as before)
+    // 🔐 Check active subscription
     const sub = await prisma.subscription.findFirst({
       where: { userId: req.user.id, status: "active" },
     });
 
     if (!sub) {
+      // Free plan → 5 total invoices limit
       const invoiceCount = await prisma.invoice.count({
         where: { userId: req.user.id },
       });
-      if (invoiceCount >= 15) {
+
+      if (invoiceCount >= 5) {
         return res.status(403).json({
           message: "Free plan limit reached (5 invoices). Upgrade to continue.",
         });
       }
-    } else if (sub.planName === "starter") {
+    } else {
+      // Starter / Pro plan monthly limits
       const monthStart = new Date();
       monthStart.setDate(1);
       monthStart.setHours(0, 0, 0, 0);
@@ -48,10 +51,16 @@ router.post("/", protect, async (req: any, res) => {
         },
       });
 
-      if (monthlyCount >= 1000) {
+      if (sub.planName === "starter" && monthlyCount >= 50) {
         return res.status(403).json({
           message:
-            "Starter plan limit reached (1000 invoices/month). Upgrade to Pro for unlimited invoices.",
+            "Starter plan limit reached (50 invoices/month). Upgrade to Pro for higher limits.",
+        });
+      }
+
+      if (sub.planName === "pro" && monthlyCount >= 100) {
+        return res.status(403).json({
+          message: "Pro plan limit reached (100 invoices/month).",
         });
       }
     }
@@ -68,13 +77,13 @@ router.post("/", protect, async (req: any, res) => {
       finalClientEmail = client.email;
     }
 
-    // Ensure company exists and grab its details
+    // Ensure company exists
     const company = await prisma.company.findUnique({
       where: { id: companyId },
     });
     if (!company) return res.status(404).json({ message: "Company not found" });
 
-    // Create invoice record (store paymentDetails too)
+    // 🧾 Create invoice
     const invoice = await prisma.invoice.create({
       data: {
         userId: req.user.id,
@@ -93,7 +102,7 @@ router.post("/", protect, async (req: any, res) => {
       },
     });
 
-    // Generate PDF and upload to Supabase, pass full company details to the generator
+    // 🧾 Generate and upload PDF
     const pdfUrl = await generateInvoicePDF(invoice.id, {
       clientName: finalClientName,
       clientEmail: finalClientEmail,
@@ -110,7 +119,6 @@ router.post("/", protect, async (req: any, res) => {
       paymentDetails: paymentDetails || "",
     });
 
-    // Save pdfUrl
     await prisma.invoice.update({
       where: { id: invoice.id },
       data: { pdfUrl },

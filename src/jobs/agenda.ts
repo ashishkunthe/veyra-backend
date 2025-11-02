@@ -9,6 +9,11 @@ const agenda = new Agenda({ db: { address: process.env.MONGO_URL! } });
 agenda.define("generate recurring invoices", async () => {
   const recurringInvoices = await prisma.invoice.findMany({
     where: { isRecurring: true },
+    include: {
+      company: true,
+      user: true,
+      client: true,
+    },
   });
 
   const now = new Date();
@@ -16,63 +21,71 @@ agenda.define("generate recurring invoices", async () => {
   for (const invoice of recurringInvoices) {
     let shouldGenerate = false;
 
+    const lastGenerated = new Date(invoice.createdAt);
+    let nextDate = new Date(lastGenerated);
+
     if (invoice.recurrenceInterval === "monthly") {
-      const nextDate = new Date(invoice.createdAt);
-      nextDate.setMonth(nextDate.getMonth() + 1);
-      shouldGenerate = now >= nextDate;
+      nextDate.setMonth(lastGenerated.getMonth() + 1);
     } else if (invoice.recurrenceInterval === "weekly") {
-      const nextDate = new Date(invoice.createdAt);
-      nextDate.setDate(nextDate.getDate() + 7);
-      shouldGenerate = now >= nextDate;
+      nextDate.setDate(lastGenerated.getDate() + 7);
     } else if (invoice.recurrenceInterval === "yearly") {
-      const nextDate = new Date(invoice.createdAt);
-      nextDate.setFullYear(nextDate.getFullYear() + 1);
-      shouldGenerate = now >= nextDate;
+      nextDate.setFullYear(lastGenerated.getFullYear() + 1);
     }
 
-    if (shouldGenerate) {
-      const newInvoice = await prisma.invoice.create({
-        data: {
-          userId: invoice.userId,
-          companyId: invoice.companyId,
-          clientId: invoice.clientId,
-          clientName: invoice.clientName,
-          clientEmail: invoice.clientEmail, //@ts-ignore
-          items: invoice.items,
-          tax: invoice.tax,
-          total: invoice.total,
-          dueDate: new Date(now.setDate(now.getDate() + 7)), // example: due in 7 days
-          status: "pending",
-          isRecurring: true,
-          recurrenceInterval: invoice.recurrenceInterval,
-        },
-      });
-
-      const pdfUrl = await generateInvoicePDF(newInvoice.id, {
-        clientName: newInvoice.clientName,
-        clientEmail: newInvoice.clientEmail,
-        companyName: "Your Company",
-        total: newInvoice.total,
-        // @ts-ignore
-        items: newInvoice.items,
-        dueDate: newInvoice.dueDate,
-        tax: newInvoice.tax,
-      });
-
-      await prisma.invoice.update({
-        where: { id: newInvoice.id },
-        data: { pdfUrl },
-      });
-
-      await sendInvoiceEmail(
-        newInvoice.clientEmail,
-        "Your Recurring Invoice",
-        "Please find your recurring invoice attached.",
-        pdfUrl
-      );
-
-      console.log(`📬 Recurring invoice generated: ${newInvoice.id}`);
+    if (now >= nextDate) {
+      shouldGenerate = true;
     }
+
+    if (!shouldGenerate) continue;
+
+    // 🧩 Create a new invoice based on the recurring one
+    const newInvoice = await prisma.invoice.create({
+      data: {
+        userId: invoice.userId,
+        companyId: invoice.companyId,
+        clientId: invoice.clientId,
+        clientName: invoice.clientName,
+        clientEmail: invoice.clientEmail,
+        items: invoice.items as any,
+        tax: invoice.tax,
+        total: invoice.total,
+        dueDate: new Date(now.setDate(now.getDate() + 7)), // due in 7 days
+        status: "pending",
+        isRecurring: true,
+        recurrenceInterval: invoice.recurrenceInterval,
+        paymentDetails: invoice.paymentDetails,
+      },
+    });
+
+    // 🧾 Generate new PDF dynamically from company data
+    const pdfUrl = await generateInvoicePDF(newInvoice.id, {
+      clientName: newInvoice.clientName,
+      clientEmail: newInvoice.clientEmail,
+      companyName: invoice.company?.name || "Unknown Company",
+      companyAddress: invoice.company?.address || "",
+      companyTaxInfo: invoice.company?.taxInfo || "",
+      tax: newInvoice.tax,
+      total: newInvoice.total,
+      items: newInvoice.items as any,
+      dueDate: newInvoice.dueDate,
+      paymentDetails: newInvoice.paymentDetails || "",
+    });
+
+    // 🔗 Update invoice with PDF URL
+    await prisma.invoice.update({
+      where: { id: newInvoice.id },
+      data: { pdfUrl },
+    });
+
+    // ✉️ Send email automatically
+    await sendInvoiceEmail(
+      newInvoice.clientEmail,
+      "Your Recurring Invoice",
+      "Please find your new recurring invoice attached.",
+      pdfUrl
+    );
+
+    console.log(`📬 Recurring invoice generated & sent: ${newInvoice.id}`);
   }
 });
 
