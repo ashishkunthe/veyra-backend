@@ -1,4 +1,7 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
+import fs from "fs";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export const sendInvoiceEmail = async (
   clientEmail: string,
@@ -6,23 +9,18 @@ export const sendInvoiceEmail = async (
   text: string,
   pdfPath: string
 ) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
+  // Load PDF as a buffer
+  const pdfBuffer = fs.readFileSync(pdfPath);
 
-  await transporter.sendMail({
-    from: `"SaaS Invoice Tool" <${process.env.SMTP_USER}>`,
+  await resend.emails.send({
+    from: "SaaS Invoice Tool <onboarding@resend.dev>",
     to: clientEmail,
     subject,
     text,
     attachments: [
       {
         filename: "invoice.pdf",
-        path: pdfPath,
+        content: pdfBuffer,
       },
     ],
   });
