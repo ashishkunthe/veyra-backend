@@ -15,7 +15,7 @@ export const sendInvoiceEmail = async (
 
   // Send email via Resend
   await resend.emails.send({
-    from: "SaaS Invoice Tool <onboarding@resend.dev>",
+    from: "Veyra Invoicing <onboarding@resend.dev>",
     to: clientEmail,
     subject,
     text,
